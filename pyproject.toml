@@ -1,0 +1,12 @@
+[project]
+name = "main"
+version = "0.1.0"
+description = "Claude Agent SDK WebFetch example"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk>=0.2.110",
+    "anyio>=4",
+]
+
+[tool.uv]
+package = false
