@@ -1,7 +1,6 @@
 """Shared helper for running OpenCode agent sessions."""
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 import sys
@@ -19,9 +18,6 @@ from opencode_agent_sdk import (
 )
 
 from config import DEFAULT_FREE_MODEL, REPO_ROOT
-
-# Harmless shutdown noise when the SDK tears down its in-process MCP bridge.
-logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
 
 REASONING_AGENT = "hedgefund-reasoning"
 WEB_AGENT = "hedgefund-web"
