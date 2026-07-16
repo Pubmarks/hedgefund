@@ -3,7 +3,7 @@
   "model": "opencode/big-pickle",
   "agent": {
     "hedgefund-reasoning": {
-      "description": "Read-only reasoning; no tools",
+      "description": "Read-only market analysis; no tools",
       "mode": "primary",
       "steps": 1,
       "permission": {
@@ -22,7 +22,7 @@
       }
     },
     "hedgefund-web": {
-      "description": "Web fetch for research",
+      "description": "Web search and fetch for gap-filling research",
       "mode": "primary",
       "steps": 10,
       "permission": {
@@ -36,7 +36,7 @@
         "skill": "deny",
         "lsp": "deny",
         "webfetch": "allow",
-        "websearch": "deny",
+        "websearch": "allow",
         "question": "deny"
       }
     }

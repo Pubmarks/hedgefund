@@ -16,7 +16,7 @@ jobs:
   research:
     name: Research ${{ inputs.ticker }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Install podman
@@ -51,6 +51,7 @@ jobs:
       - name: Run research
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
           set -euo pipefail
           ticker="${{ steps.ticker.outputs.value }}"
@@ -61,31 +62,33 @@ jobs:
           # container instead, then copy the file out.
           cid="$(podman create \
             -e OPENCODE_API_KEY \
+            -e FRED_API_KEY \
             -e OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
             -e OPENCODE_PURE=1 \
             "${image}" \
-            "${ticker}" \
-            -o "/tmp/${ticker}.md")"
+            "${ticker}")"
           trap 'podman rm -f "${cid}" >/dev/null 2>&1 || true' EXIT
           podman start -a "${cid}"
-          podman cp "${cid}:/tmp/${ticker}.md" "out/${ticker}.md"
+          mkdir -p "out/${ticker}"
+          podman cp "${cid}:/app/out/${ticker}/." "out/${ticker}/"
 
       - name: Publish summary
         run: |
-          summary="out/${{ steps.ticker.outputs.value }}.md"
+          ticker="${{ steps.ticker.outputs.value }}"
+          summary="out/${ticker}/final-report.md"
           if [ ! -s "$summary" ]; then
             echo "Missing or empty summary at $summary" >&2
             exit 1
           fi
           {
-            echo "## Ticker research: ${{ steps.ticker.outputs.value }}"
+            echo "## Ticker research: ${ticker}"
             echo
             cat "$summary"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload markdown artifact
+      - name: Upload research artifact
         uses: actions/upload-artifact@v4
         with:
           name: ticker-${{ steps.ticker.outputs.value }}
-          path: out/${{ steps.ticker.outputs.value }}.md
+          path: out/${{ steps.ticker.outputs.value }}/
           if-no-files-found: error
