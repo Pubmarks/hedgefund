@@ -51,6 +51,7 @@ jobs:
       - name: Run research
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
           set -euo pipefail
           ticker="${{ steps.ticker.outputs.value }}"
@@ -61,6 +62,7 @@ jobs:
           # container instead, then copy the file out.
           cid="$(podman create \
             -e OPENCODE_API_KEY \
+            -e FRED_API_KEY \
             -e OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
             -e OPENCODE_PURE=1 \
             "${image}" \
