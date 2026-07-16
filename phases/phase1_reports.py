@@ -26,10 +26,14 @@ async def run_phase1(ticker: str, trade_date: str, cfg: Config) -> dict[str, Pat
     base = cfg.reports_dir / ticker
     base.mkdir(parents=True, exist_ok=True)
     specs = [
-        ("market",       base / "market.md",       lambda: run_market_analyst(ticker, trade_date, cfg)),
-        ("sentiment",    base / "sentiment.md",     lambda: run_social_analyst(ticker, trade_date, cfg)),
-        ("news",         base / "news.md",          lambda: run_news_analyst(ticker, trade_date, cfg)),
-        ("fundamentals", base / "fundamentals.md",  lambda: run_fundamentals_analyst(ticker, trade_date, cfg)),
+        ("market",       base / "market.md",
+         lambda: run_market_analyst(ticker, trade_date, cfg)),
+        ("sentiment",    base / "sentiment.md",
+         lambda: run_social_analyst(ticker, trade_date, cfg)),
+        ("news",         base / "news.md",
+         lambda: run_news_analyst(ticker, trade_date, cfg)),
+        ("fundamentals", base / "fundamentals.md",
+         lambda: run_fundamentals_analyst(ticker, trade_date, cfg)),
     ]
     pending_keys, pending_coros, skipped = [], [], {}
     for key, path, make_coro in specs:

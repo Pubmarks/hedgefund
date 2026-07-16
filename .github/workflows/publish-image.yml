@@ -11,7 +11,11 @@ on:
       - main.py
       - config.py
       - agent.py
+      - pipeline.py
       - opencode.json
+      - agents/**
+      - phases/**
+      - memory/**
       - .github/workflows/publish-image.yml
   workflow_dispatch:
 
