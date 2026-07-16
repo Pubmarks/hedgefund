@@ -61,6 +61,7 @@ COPY --chown=app:app main.py config.py agent.py pipeline.py ./
 COPY --chown=app:app agents/ agents/
 COPY --chown=app:app phases/ phases/
 COPY --chown=app:app memory/ memory/
+RUN mkdir -p /app/out && chown app:app /app/out
 
 USER app
 
