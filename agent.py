@@ -1,9 +1,10 @@
-"""Shared helper for running OpenCode agent sessions (adapted from Sniper-Street)."""
+"""Shared helper for running OpenCode agent sessions."""
 from __future__ import annotations
 
 import logging
 import os
 import shutil
+import sys
 from datetime import datetime, timezone
 from typing import Any, Sequence
 
@@ -65,7 +66,8 @@ def _log(name: str, tag: str, detail: str = "") -> None:
     parts = [f"[{name}]", tag]
     if detail:
         parts.append(detail)
-    print("  ".join(parts), flush=True)
+    # Keep stdout clean for piping the final markdown summary.
+    print("  ".join(parts), flush=True, file=sys.stderr)
 
 
 async def ensure_opencode_ready(*, server_url: str = "") -> None:

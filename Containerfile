@@ -12,6 +12,10 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # Cache layer keyed on the lock files only; the app code is copied later.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -22,9 +26,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ----------------------------------------------------------------------------
 FROM ${BASE} AS runtime
 
-LABEL org.opencontainers.image.title="main" \
-      org.opencontainers.image.description="OpenCode SDK webfetch example" \
-      org.opencontainers.image.source="https://github.com/Donnie/Sniper-Street"
+LABEL org.opencontainers.image.title="hedgefund" \
+      org.opencontainers.image.description="Agentic hedge fund research agents" \
+      org.opencontainers.image.source="https://github.com/Pubmarks/hedgefund"
 
 # Unprivileged user with a writable HOME (OpenCode stores local state there).
 RUN groupadd --gid 10001 app \

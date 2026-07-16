@@ -1,7 +1,7 @@
 [project]
-name = "main"
+name = "hedgefund"
 version = "0.1.0"
-description = "OpenCode SDK webfetch example (Sniper-Street style)"
+description = "Agentic hedge fund research agents"
 requires-python = ">=3.11"
 dependencies = [
     "opencode-agent-sdk>=0.4.12",
@@ -14,4 +14,4 @@ dependencies = [
 package = false
 
 [tool.uv.sources]
-tools = { git = "https://github.com/Pubmarks/tools.git", rev = "flatten" }
+tools = { git = "https://github.com/Pubmarks/tools.git" }
