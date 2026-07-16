@@ -53,18 +53,22 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           set -euo pipefail
+          ticker="${{ steps.ticker.outputs.value }}"
+          image="${{ steps.image.outputs.ref }}"
           mkdir -p out
-          # Image runs as uid 10001 (app); host-mounted out/ must be writable by that user.
-          sudo chown 10001:10001 out
-          # Agent progress on stderr; summary written to the mounted /out path.
-          podman run --rm \
+          # Rootless podman remaps uids, so bind-mounting ./out as /out often
+          # Permission-denies writes from USER app (10001). Write inside the
+          # container instead, then copy the file out.
+          cid="$(podman create \
             -e OPENCODE_API_KEY \
             -e OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
             -e OPENCODE_PURE=1 \
-            -v "$PWD/out:/out:Z" \
-            "${{ steps.image.outputs.ref }}" \
-            "${{ steps.ticker.outputs.value }}" \
-            -o "/out/${{ steps.ticker.outputs.value }}.md"
+            "${image}" \
+            "${ticker}" \
+            -o "/tmp/${ticker}.md")"
+          trap 'podman rm -f "${cid}" >/dev/null 2>&1 || true' EXIT
+          podman start -a "${cid}"
+          podman cp "${cid}:/tmp/${ticker}.md" "out/${ticker}.md"
 
       - name: Publish summary
         run: |
