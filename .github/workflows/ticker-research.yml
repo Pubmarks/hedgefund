@@ -54,14 +54,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          # Agent progress logs go to stderr (Actions log); markdown summary on stdout.
+          # Agent progress on stderr; summary written to the mounted /out path.
           podman run --rm \
             -e OPENCODE_API_KEY \
             -e OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
             -e OPENCODE_PURE=1 \
+            -v "$PWD/out:/out:Z" \
             "${{ steps.image.outputs.ref }}" \
             "${{ steps.ticker.outputs.value }}" \
-            > "out/${{ steps.ticker.outputs.value }}.md"
+            -o "/out/${{ steps.ticker.outputs.value }}.md"
 
       - name: Publish summary
         run: |

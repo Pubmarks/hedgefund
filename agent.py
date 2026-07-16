@@ -66,7 +66,7 @@ def _log(name: str, tag: str, detail: str = "") -> None:
     parts = [f"[{name}]", tag]
     if detail:
         parts.append(detail)
-    # Keep stdout clean for piping the final markdown summary.
+    # Keep stdout clean for the short status line from main.py.
     print("  ".join(parts), flush=True, file=sys.stderr)
 
 
