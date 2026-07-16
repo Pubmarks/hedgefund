@@ -23,26 +23,36 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM ${BASE} AS runtime
 
 LABEL org.opencontainers.image.title="main" \
-      org.opencontainers.image.description="Claude Agent SDK WebFetch example" \
-      org.opencontainers.image.source="https://github.com/anthropics/claude-agent-sdk-python"
+      org.opencontainers.image.description="OpenCode SDK webfetch example" \
+      org.opencontainers.image.source="https://github.com/Donnie/Sniper-Street"
 
-# Unprivileged user with a writable HOME (the bundled Claude CLI needs one).
+# Unprivileged user with a writable HOME (OpenCode stores local state there).
 RUN groupadd --gid 10001 app \
-    && useradd --uid 10001 --gid app --create-home --home-dir /home/app app
+    && useradd --uid 10001 --gid app --create-home --home-dir /home/app app \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates tar \
+    && rm -rf /var/lib/apt/lists/* \
+    && ARCH="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
+    && curl -fsSL "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-${ARCH}.tar.gz" \
+      | tar -xz -C /usr/local/bin opencode \
+    && chmod 755 /usr/local/bin/opencode \
+    && opencode --version
 
-ENV PATH="/app/.venv/bin:$PATH" \
+ENV PATH="/app/.venv/bin:/usr/local/bin:$PATH" \
     HOME="/home/app" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_NO_SYNC=1 \
     UV_FROZEN=1 \
-    UV_NO_CACHE=1
+    UV_NO_CACHE=1 \
+    OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
+    OPENCODE_PURE=1
 
 WORKDIR /app
 
 # Pre-built virtual environment and project metadata from the builder stage.
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --chown=app:app pyproject.toml uv.lock main.py config.py ./
+COPY --chown=app:app pyproject.toml uv.lock main.py config.py agent.py opencode.json ./
 
 USER app
 

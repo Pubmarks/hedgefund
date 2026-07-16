@@ -1,0 +1,44 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/big-pickle",
+  "agent": {
+    "hedgefund-reasoning": {
+      "description": "Read-only reasoning; no tools",
+      "mode": "primary",
+      "steps": 1,
+      "permission": {
+        "read": "deny",
+        "edit": "deny",
+        "bash": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "list": "deny",
+        "task": "deny",
+        "skill": "deny",
+        "lsp": "deny",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "question": "deny"
+      }
+    },
+    "hedgefund-web": {
+      "description": "Web fetch for research",
+      "mode": "primary",
+      "steps": 10,
+      "permission": {
+        "read": "deny",
+        "edit": "deny",
+        "bash": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "list": "deny",
+        "task": "deny",
+        "skill": "deny",
+        "lsp": "deny",
+        "webfetch": "allow",
+        "websearch": "deny",
+        "question": "deny"
+      }
+    }
+  }
+}

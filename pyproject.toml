@@ -1,11 +1,12 @@
 [project]
 name = "main"
 version = "0.1.0"
-description = "Claude Agent SDK WebFetch example"
-requires-python = ">=3.10"
+description = "OpenCode SDK webfetch example (Sniper-Street style)"
+requires-python = ">=3.11"
 dependencies = [
-    "claude-agent-sdk>=0.2.110",
-    "anyio>=4",
+    "opencode-agent-sdk>=0.4.12",
+    "opencode-ai>=0.1.0a36",
+    "python-dotenv>=1.0",
 ]
 
 [tool.uv]

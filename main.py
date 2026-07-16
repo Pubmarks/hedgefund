@@ -1,45 +1,48 @@
-"""Minimal Claude Agent SDK example using the built-in WebFetch tool.
+"""Minimal OpenCode SDK example using the built-in webfetch tool.
 
-Run with uv (uses the locked project environment):
-    export CLAUDE_CODE_OAUTH_TOKEN="sk-ant-..."
+Defaults to subprocess ACP (`opencode acp`) via opencode-agent-sdk, matching
+Sniper-Street. Set OPENCODE_SERVER_URL to use an external `opencode serve`.
+
+Run with uv:
     uv run --frozen python main.py
 """
 
-import anyio
+from __future__ import annotations
 
-from claude_agent_sdk import (
-    AssistantMessage,
-    ClaudeAgentOptions,
-    TextBlock,
-    query,
-)
+import asyncio
+import sys
 
-from config import Config
+from agent import ensure_opencode_ready, run_agent
+from config import default_config
 
 PROMPT = (
     "Fetch https://modelcontextprotocol.io and summarize what it is "
     "in 3 short bullet points."
 )
 
+SYSTEM = (
+    "You are a concise research assistant. Use webfetch to read the URL, "
+    "then answer with exactly 3 short bullet points."
+)
+
 
 async def main() -> None:
-    config = Config()
-    options = ClaudeAgentOptions(
-        # Use the fast/cheap model from config for this lightweight fetch task.
-        model=config.quick_model,
-        # Auto-approve the WebFetch tool so it runs non-interactively.
-        allowed_tools=["WebFetch"],
-        permission_mode="acceptEdits",
+    cfg = default_config()
+    await ensure_opencode_ready(server_url=cfg.opencode_server_url)
+    text = await run_agent(
+        prompt=PROMPT,
+        system_prompt=SYSTEM,
+        allowed_tools=("WebFetch",),
         max_turns=5,
+        model=cfg.quick_model,
+        name="webfetch-demo",
     )
-
-    async for message in query(prompt=PROMPT, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    print(block.text, end="")
-    print()
+    print(text)
 
 
 if __name__ == "__main__":
-    anyio.run(main)
+    try:
+        asyncio.run(main())
+    except Exception as exc:  # noqa: BLE001 - top-level CLI boundary
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
