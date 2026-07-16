@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,23 @@ load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_FREE_MODEL = "opencode/big-pickle"
+
+
+def _configure_logging() -> None:
+    level_name = os.getenv("LOG_LEVEL", "WARNING").strip().upper() or "WARNING"
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        level = logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
+    # Harmless shutdown noise when the SDK tears down its in-process MCP bridge.
+    logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
+
+
+_configure_logging()
 
 
 @dataclass
