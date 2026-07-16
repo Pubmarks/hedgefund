@@ -7,6 +7,11 @@ on:
         description: Stock ticker symbol (e.g. AAPL)
         required: true
         type: string
+      image_tag:
+        description: Container image tag (e.g. latest, sha-abc1234)
+        required: false
+        type: string
+        default: latest
 
 permissions:
   contents: read
@@ -38,7 +43,13 @@ jobs:
         id: image
         run: |
           name="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-          echo "ref=ghcr.io/${name}:latest" >> "$GITHUB_OUTPUT"
+          tag='${{ inputs.image_tag }}'
+          tag="$(printf '%s' "$tag" | tr -d '[:space:]')"
+          if [ -z "$tag" ]; then
+            tag=latest
+          fi
+          echo "ref=ghcr.io/${name}:${tag}" >> "$GITHUB_OUTPUT"
+          echo "Using image: ghcr.io/${name}:${tag}"
 
       - name: Log in to GitHub Container Registry
         run: |
@@ -52,6 +63,9 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          HEDGEFUND_QUICK_MODEL: ${{ vars.HEDGEFUND_QUICK_MODEL }}
+          HEDGEFUND_DEEP_MODEL: ${{ vars.HEDGEFUND_DEEP_MODEL }}
+          HEDGEFUND_EPIC_MODEL: ${{ vars.HEDGEFUND_EPIC_MODEL }}
         run: |
           set -euo pipefail
           ticker="${{ steps.ticker.outputs.value }}"
@@ -63,6 +77,9 @@ jobs:
           cid="$(podman create \
             -e OPENCODE_API_KEY \
             -e FRED_API_KEY \
+            -e HEDGEFUND_QUICK_MODEL \
+            -e HEDGEFUND_DEEP_MODEL \
+            -e HEDGEFUND_EPIC_MODEL \
             -e OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
             -e OPENCODE_PURE=1 \
             "${image}" \
