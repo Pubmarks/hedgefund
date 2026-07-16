@@ -205,14 +205,20 @@ async def ensure_opencode_ready(*, server_url: str = "") -> None:
 # OpenCode execution paths
 # ---------------------------------------------------------------------------
 
-async def _set_session_mode(client: SDKClient, mode_id: str) -> None:
+async def _set_session_mode(client: SDKClient, mode_id: str) -> bool:
+    """Set the session mode. Returns True on success, False on failure."""
     session = client._session  # noqa: SLF001 — subprocess ACP only
     if session is None:
-        return
-    await session._send_request(  # noqa: SLF001
-        "session/set_mode",
-        {"sessionId": session.session_id, "modeId": mode_id},
-    )
+        return False
+    try:
+        await session._send_request(  # noqa: SLF001
+            "session/set_mode",
+            {"sessionId": session.session_id, "modeId": mode_id},
+        )
+        return True
+    except Exception as exc:
+        _log("", "mode-fallback", f"Failed to set mode {mode_id}: {exc}; using default")
+        return False
 
 
 def _extract_http_text(messages: Any) -> str:
@@ -290,7 +296,9 @@ async def _run_subprocess_sdk(
     client = SDKClient(options=options)
     await client.connect()
     try:
-        await _set_session_mode(client, mode_id)
+        mode_ok = await _set_session_mode(client, mode_id)
+        if not mode_ok:
+            _log(name, "warn", f"mode '{mode_id}' unavailable; proceeding with default agent")
         await client.query(prompt)
         last_text = ""
         async for message in client.receive_response():
