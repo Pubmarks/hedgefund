@@ -56,7 +56,11 @@ WORKDIR /app
 
 # Pre-built virtual environment and project metadata from the builder stage.
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --chown=app:app pyproject.toml uv.lock main.py config.py agent.py opencode.json ./
+COPY --chown=app:app pyproject.toml uv.lock opencode.json ./
+COPY --chown=app:app main.py config.py agent.py pipeline.py ./
+COPY --chown=app:app agents/ agents/
+COPY --chown=app:app phases/ phases/
+COPY --chown=app:app memory/ memory/
 
 USER app
 

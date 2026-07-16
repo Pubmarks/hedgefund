@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parent
+REPORTS_DIR = REPO_ROOT / "out"
+DEFAULT_MEMORY_PATH = Path.home() / ".hedgefund" / "memory.md"
 DEFAULT_FREE_MODEL = "opencode/big-pickle"
 
 
@@ -23,7 +25,6 @@ def _configure_logging() -> None:
         format="%(levelname)s %(name)s: %(message)s",
         force=True,
     )
-    # Harmless shutdown noise when the SDK tears down its in-process MCP bridge.
     logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
 
 
@@ -32,14 +33,29 @@ _configure_logging()
 
 @dataclass
 class Config:
-    # Model tiers — OpenCode provider/model format (default: free Zen model)
+    # Debate settings
+    max_debate_rounds: int = 1
+    max_risk_discuss_rounds: int = 1
+
+    # Model tiers — OpenCode provider/model format
     quick_model: str = DEFAULT_FREE_MODEL
     deep_model: str = DEFAULT_FREE_MODEL
     epic_model: str = DEFAULT_FREE_MODEL
 
-    # OpenCode runtime — leave server_url empty for subprocess ACP (recommended)
+    # Paths
+    reports_dir: Path = field(default_factory=lambda: REPORTS_DIR)
+    memory_log_path: Path = field(default_factory=lambda: DEFAULT_MEMORY_PATH)
+    memory_log_max_entries: int | None = None
+
+    # OpenCode runtime
     opencode_server_url: str = ""
     opencode_api_key: str = ""
+
+    # OHLCV lookback window in years (used by market analyst)
+    ohlcv_years: int = 5
+
+    # News lookback in days (used by social/news analysts)
+    news_lookback_days: int = 7
 
 
 def default_config() -> Config:
