@@ -1,0 +1,84 @@
+name: Build PR image
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build test image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/build') &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+
+    steps:
+      - name: Resolve PR head
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")"
+          sha="$(printf '%s' "$pr" | jq -r .head.sha)"
+          branch="$(printf '%s' "$pr" | jq -r .head.ref)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+          echo "Building PR #${{ github.event.issue.number }} (${branch} @ ${sha})"
+
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+
+      - name: Install podman
+        run: sudo apt-get update && sudo apt-get install -y podman
+
+      - name: Image name
+        id: image
+        run: |
+          name="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          short="$(git rev-parse --short HEAD)"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+          echo "ref=ghcr.io/${name}:${short}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.ref }}"
+          podman build -f Containerfile -t "${image}" .
+          podman push "${image}"
+          {
+            echo "## PR test image"
+            echo
+            echo "\`${image}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ github.event.issue.number }}" --body "$(cat <<EOF
+          Built test image from \`${{ steps.image.outputs.short }}\` (\`${{ steps.pr.outputs.branch }}\`):
+
+          \`\`\`
+          ${{ steps.image.outputs.ref }}
+          \`\`\`
+          EOF
+          )"

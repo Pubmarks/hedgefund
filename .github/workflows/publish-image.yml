@@ -1,0 +1,59 @@
+name: Publish image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Containerfile
+      - .containerignore
+      - pyproject.toml
+      - uv.lock
+      - main.py
+      - config.py
+      - agent.py
+      - opencode.json
+      - .github/workflows/publish-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install podman
+        run: sudo apt-get update && sudo apt-get install -y podman
+
+      - name: Image tags
+        id: image
+        run: |
+          name="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          short="$(git rev-parse --short HEAD)"
+          echo "name=ghcr.io/${name}" >> "$GITHUB_OUTPUT"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.name }}"
+          short="${{ steps.image.outputs.short }}"
+          podman build -f Containerfile \
+            -t "${image}:latest" \
+            -t "${image}:sha-${short}" \
+            .
+          podman push "${image}:latest"
+          podman push "${image}:sha-${short}"
+          echo "Pushed ${image}:latest and ${image}:sha-${short}" >> "$GITHUB_STEP_SUMMARY"

@@ -7,7 +7,11 @@ dependencies = [
     "opencode-agent-sdk>=0.4.12",
     "opencode-ai>=0.1.0a36",
     "python-dotenv>=1.0",
+    "tools",
 ]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+tools = { git = "https://github.com/Pubmarks/tools.git", rev = "flatten" }
