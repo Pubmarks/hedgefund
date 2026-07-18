@@ -24,10 +24,20 @@ permissions:
   packages: write
 
 jobs:
-  build-and-push:
-    name: Build and push
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
@@ -54,10 +64,61 @@ jobs:
           set -euo pipefail
           image="${{ steps.image.outputs.name }}"
           short="${{ steps.image.outputs.short }}"
-          podman build -f Containerfile \
-            -t "${image}:latest" \
-            -t "${image}:sha-${short}" \
+          arch="${{ matrix.arch }}"
+          tag="${image}:sha-${short}-${arch}"
+          podman build \
+            --platform "${{ matrix.platform }}" \
+            -f Containerfile \
+            -t "${tag}" \
             .
-          podman push "${image}:latest"
-          podman push "${image}:sha-${short}"
-          echo "Pushed ${image}:latest and ${image}:sha-${short}" >> "$GITHUB_STEP_SUMMARY"
+          podman push "${tag}"
+          echo "Pushed \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  manifest:
+    name: Create multi-arch manifest
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install podman
+        run: sudo apt-get update && sudo apt-get install -y podman
+
+      - name: Image tags
+        id: image
+        run: |
+          name="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          short="$(git rev-parse --short HEAD)"
+          echo "name=ghcr.io/${name}" >> "$GITHUB_OUTPUT"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Create and push manifests
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.name }}"
+          short="${{ steps.image.outputs.short }}"
+          amd64="${image}:sha-${short}-amd64"
+          arm64="${image}:sha-${short}-arm64"
+
+          for tag in "sha-${short}" latest; do
+            podman manifest create "${image}:${tag}"
+            podman manifest add "${image}:${tag}" "docker://${amd64}"
+            podman manifest add "${image}:${tag}" "docker://${arm64}"
+            podman manifest push --all "${image}:${tag}" "docker://${image}:${tag}"
+          done
+
+          {
+            echo "## Multi-arch image"
+            echo
+            echo "Pushed \`${image}:latest\` and \`${image}:sha-${short}\`"
+            echo
+            echo "Platforms: \`linux/amd64\`, \`linux/arm64\`"
+          } >> "$GITHUB_STEP_SUMMARY"
