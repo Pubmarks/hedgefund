@@ -6,7 +6,24 @@ Agentic processes can run a trading firm as a coordinated multi-agent pipeline: 
 
 ## Fork and Play
 
-Fork this repo, open the **Actions** tab, and run **Ticker research**. Enter a stock ticker (e.g. `AAPL`) and start the workflow. GitHub Actions runs the full multi-agent pipeline in the cloud, posts the final report to the job summary, and uploads the research files as artifacts, downloadable as .zip. No local install, Docker, or API wiring required: defaults use free OpenCode models, so you can fork and run from the browser alone.
+### Step 1
+
+Fork this repo and open the **Actions** tab.
+
+### Step 2
+
+Run **Publish image** workflow once. That builds the container and prepares it for Step 3.
+
+### Step 3
+
+Run **Ticker research** workflow, enter a stock ticker (e.g. `AAPL`), and start the workflow.
+
+GitHub Actions runs the full multi-agent pipeline in the cloud, posts the final report to the job summary, makes available the source documents artifacts (downloadable as `.zip`). 
+
+**Absolutely zero cost of research**
+
+No local install, Docker, or API wiring required: defaults use free OpenCode models, so you can fork and run from the browser alone.
+
 
 ### Customise (Optional)
 
@@ -16,7 +33,7 @@ For more control, open your fork’s **Settings → Secrets and variables → Ac
 
 | Name | Purpose |
 | --- | --- |
-| `OPENCODE_API_KEY` | Auth for OpenCode; optional with the free `opencode/big-pickle` default, required for paid providers |
+| `OPENCODE_API_KEY` | Auth for OpenCode; required only for premium models |
 | `FRED_API_KEY` | Macro data from FRED; set this for fuller news/macro analyst reports |
 
 **Variables** (non-secret model config, OpenCode `provider/model` format):
@@ -27,7 +44,7 @@ For more control, open your fork’s **Settings → Secrets and variables → Ac
 | `HEDGEFUND_DEEP_MODEL` | Deeper analysis | `opencode/big-pickle` |
 | `HEDGEFUND_EPIC_MODEL` | Highest-stakes reasoning | `opencode/big-pickle` |
 
-After saving, re-run **Ticker research**. The workflow injects these into the container automatically—no code or image changes needed.
+After saving, re-run **Ticker research**. The workflow injects these into the container automatically, no code or image changes needed.
 
 ## Advanced
 
@@ -69,4 +86,6 @@ Layout:
 | `opencode.json` | OpenCode agent permissions and default model |
 | `memory/` | Memory log / reflection used across runs |
 
-Typical loop: edit an agent prompt or phase under `agents/` / `phases/`, re-run `uv run --frozen python main.py <TICKER>`, inspect intermediate files under `out/<TICKER>/`. Bump debate or risk rounds from the CLI while iterating. When you change dependencies, update `pyproject.toml` and refresh the lock with `uv lock`, then `uv sync --frozen`. To ship a container for Actions, push to `main` (or run **Publish image**) so GHCR gets a new `latest` tag for **Ticker research**.
+Typical loop: edit an agent prompt or phase under `agents/` / `phases/`, re-run `uv run --frozen python main.py <TICKER>`, inspect intermediate files under `out/<TICKER>/`. Bump debate or risk rounds from the CLI while iterating. When you change dependencies, update `pyproject.toml` and refresh the lock with `uv lock`, then `uv sync --frozen`.
+
+**Merges to `main` rebuilds and pushes `latest` automatically.**
