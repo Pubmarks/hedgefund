@@ -15,6 +15,14 @@ DEFAULT_MEMORY_PATH = Path.home() / ".hedgefund" / "memory.md"
 DEFAULT_FREE_MODEL = "opencode/big-pickle"
 
 
+class _DropOpencodeNoise(logging.Filter):
+    """Hide OpenCode CLI catch-all stderr that the SDK re-logs as WARNING."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return "opencode stderr: Error: Unexpected error" not in msg
+
+
 def _configure_logging() -> None:
     level_name = os.getenv("LOG_LEVEL", "WARNING").strip().upper() or "WARNING"
     level = getattr(logging, level_name, None)
@@ -26,6 +34,8 @@ def _configure_logging() -> None:
         force=True,
     )
     logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
+    transport = logging.getLogger("opencode_agent_sdk._internal.transport")
+    transport.addFilter(_DropOpencodeNoise())
 
 
 _configure_logging()
