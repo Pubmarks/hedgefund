@@ -45,10 +45,11 @@ For more control, open your fork’s **Settings → Secrets and variables → Ac
 **Secrets** (sensitive keys):
 
 
-| Name               | Purpose                                                              |
-| ------------------ | -------------------------------------------------------------------- |
-| `OPENCODE_API_KEY` | Auth for OpenCode; required only for premium models                  |
-| `FRED_API_KEY`     | Macro data from FRED; set this for fuller news/macro analyst reports |
+| Name                 | Purpose                                                                 |
+| -------------------- | ----------------------------------------------------------------------- |
+| `OPENCODE_API_KEY`   | Auth for OpenCode; required only for premium models      |
+| `OPENROUTER_API_KEY` | Auth for OpenRouter; required only for premium models |
+| `FRED_API_KEY`       | Macro data from FRED; set this for fuller news/macro analyst reports    |
 
 
 **Variables** (non-secret model config, OpenCode `provider/model` format):
