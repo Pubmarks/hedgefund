@@ -2,6 +2,7 @@
 name = "hedgefund"
 version = "0.1.0"
 description = "Agentic hedge fund research agents"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "opencode-agent-sdk>=0.4.12",

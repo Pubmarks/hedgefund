@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+  <title id="title">Agentic Hedgefund architecture</title>
+  <desc id="desc">Multi-agent trading pipeline: analysts, bull/bear research debate, trader, risk team, and fund manager.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="stage" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <style type="text/css"><![CDATA[
+      .label { font-family: ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif; fill: #e2e8f0; }
+      .muted { fill: #94a3b8; font-size: 11px; }
+      .agent { font-size: 12px; font-weight: 600; fill: #f8fafc; }
+      .phase { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+      .flow { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .flow-soft { stroke: #475569; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .card { filter: url(#soft); }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.35; }
+        50% { opacity: 0.9; }
+      }
+      @keyframes drift {
+        0% { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: -24; }
+      }
+      .pulse { animation: pulse 2.4s ease-in-out infinite; }
+      .drift { stroke-dasharray: 6 6; animation: drift 1.2s linear infinite; }
+      .a1 { animation-delay: 0s; }
+      .a2 { animation-delay: 0.3s; }
+      .a3 { animation-delay: 0.6s; }
+      .a4 { animation-delay: 0.9s; }
+    ]]></style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="520" rx="16" fill="url(#bg)"/>
+  <rect x="1" y="1" width="1098" height="518" rx="15" fill="none" stroke="#334155" stroke-width="1"/>
+
+  <!-- Header -->
+  <text x="40" y="42" class="label" style="font-size:20px;font-weight:700;fill:#f8fafc">Agentic Hedgefund</text>
+  <text x="40" y="64" class="label muted">TradingAgents-style multi-agent pipeline &#183; five coordinated teams</text>
+
+  <!-- Stage panels -->
+  <g>
+    <rect x="28" y="90" width="200" height="360" rx="12" fill="url(#stage)" stroke="#334155"/>
+    <rect x="244" y="90" width="200" height="360" rx="12" fill="url(#stage)" stroke="#334155"/>
+    <rect x="460" y="90" width="160" height="360" rx="12" fill="url(#stage)" stroke="#334155"/>
+    <rect x="636" y="90" width="220" height="360" rx="12" fill="url(#stage)" stroke="#334155"/>
+    <rect x="872" y="90" width="200" height="360" rx="12" fill="url(#stage)" stroke="#334155"/>
+  </g>
+
+  <!-- Phase titles -->
+  <text x="128" y="118" text-anchor="middle" class="label phase" fill="#38bdf8">I &#183; Analysts</text>
+  <text x="344" y="118" text-anchor="middle" class="label phase" fill="#fbbf24">II &#183; Research</text>
+  <text x="540" y="118" text-anchor="middle" class="label phase" fill="#a78bfa">III &#183; Trader</text>
+  <text x="746" y="118" text-anchor="middle" class="label phase" fill="#fb7185">IV &#183; Risk</text>
+  <text x="972" y="118" text-anchor="middle" class="label phase" fill="#34d399">V &#183; Manager</text>
+
+  <!-- Parallel pulse indicators (analysts) -->
+  <circle cx="48" cy="138" r="4" class="pulse a1" fill="#38bdf8"/>
+  <circle cx="60" cy="138" r="4" class="pulse a2" fill="#38bdf8"/>
+  <circle cx="72" cy="138" r="4" class="pulse a3" fill="#38bdf8"/>
+  <circle cx="84" cy="138" r="4" class="pulse a4" fill="#38bdf8"/>
+  <text x="96" y="142" class="label muted">parallel</text>
+
+  <!-- Analyst agents -->
+  <g>
+    <rect class="card" x="48" y="160" width="160" height="42" rx="8" fill="#0ea5e9"/>
+    <text x="128" y="186" text-anchor="middle" class="agent">Fundamental</text>
+
+    <rect class="card" x="48" y="218" width="160" height="42" rx="8" fill="#0284c7"/>
+    <text x="128" y="244" text-anchor="middle" class="agent">Sentiment</text>
+
+    <rect class="card" x="48" y="276" width="160" height="42" rx="8" fill="#0369a1"/>
+    <text x="128" y="302" text-anchor="middle" class="agent">News / Macro</text>
+
+    <rect class="card" x="48" y="334" width="160" height="42" rx="8" fill="#075985"/>
+    <text x="128" y="360" text-anchor="middle" class="agent">Technical</text>
+  </g>
+  <text x="128" y="412" text-anchor="middle" class="label muted">gather signals &#8594; reports</text>
+
+  <!-- Research team -->
+  <g>
+    <rect class="card" x="264" y="180" width="160" height="48" rx="8" fill="#d97706"/>
+    <text x="344" y="209" text-anchor="middle" class="agent">Bull Researcher</text>
+
+    <rect class="card" x="264" y="280" width="160" height="48" rx="8" fill="#e11d48"/>
+    <text x="344" y="309" text-anchor="middle" class="agent">Bear Researcher</text>
+  </g>
+  <!-- Debate loop arrows -->
+  <path class="flow-soft drift" d="M 344 232 C 390 250, 390 260, 344 276" marker-end="url(#arrow)"/>
+  <path class="flow-soft drift" d="M 344 280 C 298 260, 298 250, 344 236" marker-end="url(#arrow)"/>
+  <text x="344" y="262" text-anchor="middle" class="label muted">debate x n</text>
+
+  <rect class="card" x="264" y="360" width="160" height="42" rx="8" fill="#b45309"/>
+  <text x="344" y="386" text-anchor="middle" class="agent">Research Manager</text>
+  <text x="344" y="432" text-anchor="middle" class="label muted">investment plan</text>
+
+  <!-- Trader -->
+  <rect class="card" x="484" y="240" width="112" height="80" rx="8" fill="#7c3aed"/>
+  <text x="540" y="274" text-anchor="middle" class="agent">Trader</text>
+  <text x="540" y="294" text-anchor="middle" class="label" style="font-size:11px;fill:#e9d5ff">Buy / Sell</text>
+  <text x="540" y="310" text-anchor="middle" class="label" style="font-size:11px;fill:#e9d5ff">size &#183; timing</text>
+  <text x="540" y="360" text-anchor="middle" class="label muted">trading plan</text>
+
+  <!-- Risk team -->
+  <rect class="card" x="660" y="170" width="172" height="42" rx="8" fill="#f43f5e"/>
+  <text x="746" y="196" text-anchor="middle" class="agent">Aggressive</text>
+
+  <rect class="card" x="660" y="230" width="172" height="42" rx="8" fill="#e11d48"/>
+  <text x="746" y="256" text-anchor="middle" class="agent">Neutral</text>
+
+  <rect class="card" x="660" y="290" width="172" height="42" rx="8" fill="#be123c"/>
+  <text x="746" y="316" text-anchor="middle" class="agent">Conservative</text>
+
+  <path class="flow-soft drift" d="M 746 216 V 226" marker-end="url(#arrow)"/>
+  <path class="flow-soft drift" d="M 746 276 V 286" marker-end="url(#arrow)"/>
+  <text x="746" y="360" text-anchor="middle" class="label muted">risk discussion x n</text>
+
+  <!-- Fund manager -->
+  <rect class="card" x="896" y="230" width="152" height="90" rx="8" fill="#059669"/>
+  <text x="972" y="268" text-anchor="middle" class="agent">Fund Manager</text>
+  <text x="972" y="290" text-anchor="middle" class="label" style="font-size:11px;fill:#d1fae5">approve &amp; finalize</text>
+  <text x="972" y="308" text-anchor="middle" class="label" style="font-size:11px;fill:#d1fae5">trade decision</text>
+  <text x="972" y="360" text-anchor="middle" class="label muted">final-report.md</text>
+
+  <!-- Stage connectors -->
+  <path class="flow drift" d="M 228 270 H 258"/>
+  <path class="flow drift" d="M 444 270 H 478"/>
+  <path class="flow drift" d="M 596 280 H 654"/>
+  <path class="flow drift" d="M 856 280 H 890"/>
+
+  <!-- Footer legend -->
+  <text x="40" y="488" class="label muted">Structured reports hand off between stages &#183; local artifacts keep the full loop explainable</text>
+  <text x="1060" y="488" text-anchor="end" class="label muted">arxiv:2412.20138</text>
+</svg>
