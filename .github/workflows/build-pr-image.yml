@@ -11,9 +11,9 @@ permissions:
 
 jobs:
   build:
-    name: Build test image
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    name: Build test image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     if: |
       github.event.issue.pull_request &&
       contains(github.event.comment.body, '/build') &&
@@ -22,6 +22,16 @@ jobs:
         github.event.comment.author_association == 'MEMBER' ||
         github.event.comment.author_association == 'COLLABORATOR'
       )
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Resolve PR head
@@ -51,7 +61,8 @@ jobs:
           name="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           short="$(git rev-parse --short HEAD)"
           echo "short=${short}" >> "$GITHUB_OUTPUT"
-          echo "ref=ghcr.io/${name}:${short}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${name}" >> "$GITHUB_OUTPUT"
+          echo "ref=ghcr.io/${name}:${short}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         run: |
@@ -62,12 +73,85 @@ jobs:
         run: |
           set -euo pipefail
           image="${{ steps.image.outputs.ref }}"
-          podman build -f Containerfile -t "${image}" .
+          podman build \
+            --platform "${{ matrix.platform }}" \
+            -f Containerfile \
+            -t "${image}" \
+            .
           podman push "${image}"
           {
-            echo "## PR test image"
+            echo "## PR test image (${{ matrix.arch }})"
             echo
             echo "\`${image}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  manifest:
+    name: Create multi-arch PR manifest
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/build') &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+
+    steps:
+      - name: Resolve PR head
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")"
+          sha="$(printf '%s' "$pr" | jq -r .head.sha)"
+          branch="$(printf '%s' "$pr" | jq -r .head.ref)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+
+      - name: Install podman
+        run: sudo apt-get update && sudo apt-get install -y podman
+
+      - name: Image name
+        id: image
+        run: |
+          name="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          short="$(git rev-parse --short HEAD)"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${name}" >> "$GITHUB_OUTPUT"
+          echo "ref=ghcr.io/${name}:${short}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Create and push manifest
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.name }}"
+          short="${{ steps.image.outputs.short }}"
+          ref="${{ steps.image.outputs.ref }}"
+
+          podman manifest create "${ref}"
+          podman manifest add "${ref}" "docker://${image}:${short}-amd64"
+          podman manifest add "${ref}" "docker://${image}:${short}-arm64"
+          podman manifest push --all "${ref}" "docker://${ref}"
+
+          {
+            echo "## PR multi-arch test image"
+            echo
+            echo "\`${ref}\`"
+            echo
+            echo "Platforms: \`linux/amd64\`, \`linux/arm64\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on PR
@@ -75,10 +159,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr comment "${{ github.event.issue.number }}" --body "$(cat <<EOF
-          Built test image from \`${{ steps.image.outputs.short }}\` (\`${{ steps.pr.outputs.branch }}\`):
+          Built multi-arch test image from \`${{ steps.image.outputs.short }}\` (\`${{ steps.pr.outputs.branch }}\`):
 
           \`\`\`
           ${{ steps.image.outputs.ref }}
           \`\`\`
+
+          Platforms: \`linux/amd64\`, \`linux/arm64\`
           EOF
           )"
