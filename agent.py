@@ -5,10 +5,14 @@ import asyncio
 import logging
 import os
 import shutil
+import subprocess
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
+import anyio
 from opencode_agent_sdk import (
     AgentOptions,
     AssistantMessage,
@@ -30,8 +34,14 @@ _CLAUDE_TO_OPENCODE = {"WebSearch": "websearch", "WebFetch": "webfetch"}
 
 # Cap concurrent sessions to avoid saturating the rate limit window when
 # Phase 1 (4 analysts) or Phase 4 (3 risk analysts) fan out in parallel.
-_CONCURRENCY = 2
+_CONCURRENCY = 4
 _SEM: asyncio.Semaphore | None = None
+
+# Heartbeat while an agent is waiting on OpenCode (connect / prompt / tools).
+_STUCK_HEARTBEAT_S = float(os.getenv("HEDGEFUND_STUCK_HEARTBEAT_S", "30"))
+
+# Auth files to copy into each isolated OpenCode data dir (env keys still win).
+_OPENCODE_AUTH_FILES = ("auth.json",)
 
 
 def _semaphore() -> asyncio.Semaphore:
@@ -112,6 +122,125 @@ def _log(name: str, tag: str, detail: str = "") -> None:
     if detail:
         parts.append(detail)
     print("  ".join(parts), flush=True)
+
+
+class _AgentProgress:
+    """Track stage + last activity so long hangs print a stuck-state heartbeat."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.stage = "init"
+        self.detail = ""
+        self.started = time.monotonic()
+        self.last_activity = self.started
+        self._task: asyncio.Task[None] | None = None
+
+    def set(self, stage: str, detail: str = "") -> None:
+        self.stage = stage
+        self.detail = detail
+        self.last_activity = time.monotonic()
+        if detail:
+            _log(self.name, stage, detail)
+        else:
+            _log(self.name, stage)
+
+    def touch(self, detail: str = "") -> None:
+        self.last_activity = time.monotonic()
+        if detail:
+            self.detail = detail
+
+    def start_heartbeat(self) -> None:
+        if _STUCK_HEARTBEAT_S <= 0:
+            return
+        self._task = asyncio.create_task(self._heartbeat())
+
+    async def _heartbeat(self) -> None:
+        try:
+            while True:
+                await asyncio.sleep(_STUCK_HEARTBEAT_S)
+                now = time.monotonic()
+                idle = now - self.last_activity
+                elapsed = now - self.started
+                if idle < _STUCK_HEARTBEAT_S:
+                    continue
+                detail = (
+                    f"stage={self.stage}  idle={idle:.0f}s  elapsed={elapsed:.0f}s"
+                )
+                if self.detail:
+                    detail = f"{detail}  last={self.detail}"
+                _log(self.name, "stuck?", detail)
+        except asyncio.CancelledError:
+            return
+
+    async def stop(self) -> None:
+        if self._task is None:
+            return
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        self._task = None
+
+
+def _patch_acp_session(client: SDKClient, progress: _AgentProgress) -> None:
+    """Fix ACP permission method name + surface pending tool/permission state.
+
+    OpenCode sends ``session/request_permission`` (ACP v1). opencode-agent-sdk
+    0.4.x only handles the legacy method ``requestPermission``, so web-tool
+    sessions wait forever for a reply that never comes.
+    """
+    session = client._session  # noqa: SLF001 — subprocess ACP only
+    if session is None:
+        return
+
+    original_handle = session._handle_message  # noqa: SLF001
+
+    async def _handle_message(msg: dict[str, Any]) -> None:
+        method = msg.get("method", "")
+
+        # Normalize ACP v1 permission requests to the SDK's legacy handler.
+        if method == "session/request_permission" and "id" in msg:
+            params = msg.get("params") or {}
+            tool_call = params.get("toolCall") or {}
+            tool_name = tool_call.get("title") or tool_call.get("kind") or "tool"
+            tool_input = tool_call.get("rawInput") or {}
+            detail = _fmt_input(str(tool_name), tool_input if isinstance(tool_input, dict) else {})
+            progress.set("permission", f"{tool_name}  {detail}".strip())
+            await session._handle_permission_request(  # noqa: SLF001
+                {**msg, "method": "requestPermission"}
+            )
+            progress.touch("permission-granted")
+            return
+
+        if method in ("session/update", "sessionUpdate"):
+            params = msg.get("params") or {}
+            update = params.get("update", params)
+            utype = update.get("sessionUpdate", "")
+            if utype == "tool_call":
+                tool_name = update.get("title") or "tool"
+                status = update.get("status") or "pending"
+                tool_input = update.get("rawInput") or {}
+                detail = _fmt_input(str(tool_name), tool_input if isinstance(tool_input, dict) else {})
+                progress.set(f"tool:{status}", f"{tool_name}  {detail}".strip())
+            elif utype == "tool_call_update":
+                tool_call_id = update.get("toolCallId", "")
+                status = update.get("status") or "update"
+                tc = session._tool_calls.get(tool_call_id, {})  # noqa: SLF001
+                tool_name = tc.get("name") or update.get("title") or tool_call_id or "tool"
+                progress.touch(f"tool:{status}:{tool_name}")
+                if status in ("in_progress", "pending"):
+                    tool_input = update.get("rawInput") or tc.get("input") or {}
+                    detail = _fmt_input(str(tool_name), tool_input if isinstance(tool_input, dict) else {})
+                    progress.set(f"tool:{status}", f"{tool_name}  {detail}".strip())
+            elif utype in ("agent_message_chunk", "agent_thought_chunk"):
+                progress.touch(utype)
+            elif utype:
+                progress.touch(utype)
+
+        await original_handle(msg)
+
+    session._handle_message = _handle_message  # noqa: SLF001
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +350,92 @@ async def _set_session_mode(client: SDKClient, mode_id: str) -> bool:
         return False
 
 
+def _isolated_opencode_env() -> tuple[dict[str, str], Path]:
+    """Per-session XDG dirs so concurrent ``opencode acp`` processes do not share a DB.
+
+    Two ACP subprocesses with the same ``XDG_DATA_HOME`` deadlock on OpenCode's
+    SQLite DB: one connects, the other hangs forever inside ``connect()``.
+    """
+    root = Path(tempfile.mkdtemp(prefix="hedgefund-opencode-"))
+    data = root / "share"
+    state = root / "state"
+    cache = root / "cache"
+    for path in (data, state, cache):
+        path.mkdir(parents=True, exist_ok=True)
+
+    # Preserve credentials from the real data dir when present.
+    real_data = Path(
+        os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+    ) / "opencode"
+    dest = data / "opencode"
+    dest.mkdir(parents=True, exist_ok=True)
+    if real_data.is_dir():
+        for name in _OPENCODE_AUTH_FILES:
+            src = real_data / name
+            if src.is_file():
+                shutil.copy2(src, dest / name)
+
+    env = os.environ.copy()
+    env["XDG_DATA_HOME"] = str(data)
+    env["XDG_STATE_HOME"] = str(state)
+    env["XDG_CACHE_HOME"] = str(cache)
+    return env, root
+
+
+async def _connect_subprocess(
+    client: SDKClient,
+    progress: _AgentProgress,
+    env: dict[str, str],
+) -> None:
+    """Connect like SDKClient._connect_subprocess, with isolated env + stage logs."""
+    from opencode_agent_sdk._internal.acp import ACPSession
+    from opencode_agent_sdk._internal.transport import SubprocessTransport, _find_opencode_binary
+    from opencode_agent_sdk.client import _build_mcp_servers
+
+    options = client._options  # noqa: SLF001
+    transport = SubprocessTransport(cwd=options.cwd)
+
+    progress.set("connecting", "spawn opencode acp")
+    binary = _find_opencode_binary()
+    transport._process = await anyio.open_process(  # noqa: SLF001
+        [binary, "acp", "--print-logs", "--log-level", "INFO", "--cwd", transport._cwd],  # noqa: SLF001
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    transport._stderr_scope = await anyio.create_task_group().__aenter__()  # noqa: SLF001
+    transport._stderr_scope.start_soon(transport._drain_stderr)  # noqa: SLF001
+    client._transport = transport  # noqa: SLF001
+
+    session = ACPSession(transport=transport, hooks=options.hooks)
+    client._session = session  # noqa: SLF001
+    await session.start_reader()
+
+    progress.set("connecting", "acp initialize")
+    await session.initialize()
+
+    effective_servers = dict(options.mcp_servers)
+    acp_mcp_servers = _build_mcp_servers(effective_servers)
+
+    progress.set("connecting", "acp session/new")
+    if options.resume:
+        await session.load_session(
+            session_id=options.resume,
+            cwd=options.cwd,
+            mcp_servers=acp_mcp_servers,
+        )
+    else:
+        await session.new_session(
+            cwd=options.cwd,
+            mcp_servers=acp_mcp_servers,
+            model=options.model or None,
+            provider_id=options.provider_id or None,
+            permission_mode=options.permission_mode,
+            system_prompt=options.system_prompt,
+        )
+
+
 def _extract_http_text(messages: Any) -> str:
     last_text = ""
     for item in messages:
@@ -285,42 +500,59 @@ async def _run_subprocess_sdk(
     mode_id: str,
     name: str,
     max_turns: int,
+    allowed_tools: Sequence[str] = (),
 ) -> str:
+    progress = _AgentProgress(name)
+    progress.start_heartbeat()
     options = AgentOptions(
         cwd=str(REPO_ROOT),
         model=model_id,
         provider_id=provider_id,
         system_prompt=full_system,
         max_turns=max_turns,
+        allowed_tools=_opencode_tools(allowed_tools) if allowed_tools else [],
     )
     client = SDKClient(options=options)
-    await client.connect()
+    env, isolated_root = _isolated_opencode_env()
     try:
+        await _connect_subprocess(client, progress, env)
+        _patch_acp_session(client, progress)
+        progress.set("connected", f"session={getattr(client._session, 'session_id', '')}")  # noqa: SLF001
+
+        progress.set("set-mode", mode_id)
         mode_ok = await _set_session_mode(client, mode_id)
         if not mode_ok:
-            _log(name, "warn", f"mode '{mode_id}' unavailable; proceeding with default agent")
+            progress.set("warn", f"mode '{mode_id}' unavailable; proceeding with default agent")
+
+        progress.set("querying", f"prompt_chars={len(prompt)}")
         await client.query(prompt)
+        progress.set("receiving", "waiting for OpenCode stream")
+
         last_text = ""
         async for message in client.receive_response():
+            progress.touch("stream-message")
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, ToolUseBlock):
                         detail = _fmt_input(block.name, block.input)
-                        _log(name, f"tool:{block.name}", detail)
+                        progress.set(f"tool:done:{block.name}", detail)
                     elif isinstance(block, TextBlock):
                         last_text = block.text
+                        progress.touch(f"text_chars={len(block.text)}")
             elif isinstance(message, SystemMessage) and message.subtype == "tool_error":
                 detail = str(message.data.get("error", message.data))[:120]
-                _log(name, "tool-error", detail)
+                progress.set("tool-error", detail)
             elif isinstance(message, ResultMessage):
                 duration = f"{message.duration_ms / 1000:.1f}s" if message.duration_ms else ""
                 cost = f"${message.total_cost_usd:.4f}" if message.total_cost_usd else ""
                 turns = f"turns={message.num_turns}"
                 summary = "  ".join(x for x in [duration, cost, turns] if x)
-                _log(name, "done", summary)
+                progress.set("done", summary)
         return last_text
     finally:
+        await progress.stop()
         await client.disconnect()
+        shutil.rmtree(isolated_root, ignore_errors=True)
 
 
 async def run_llm_direct(
@@ -362,7 +594,6 @@ async def run_agent_sdk(
     model: str | None,
     name: str,
 ) -> str:
-    _ = _opencode_tools(allowed_tools)
     full_system = _build_system(system_prompt)
     provider_id, model_id = _parse_model(model)
     return await _run_subprocess_sdk(
@@ -373,6 +604,7 @@ async def run_agent_sdk(
         mode_id=WEB_AGENT,
         name=name,
         max_turns=max_turns,
+        allowed_tools=allowed_tools,
     )
 
 
@@ -390,7 +622,11 @@ async def run_agent(
     mode = WEB_AGENT if allowed_tools else REASONING_AGENT
     _log(name, "start", f"model={provider_id}/{model_id} agent={mode}")
 
-    async with _semaphore():
+    sem = _semaphore()
+    if sem.locked():
+        _log(name, "waiting", f"concurrency={_CONCURRENCY} (slot busy)")
+    async with sem:
+        _log(name, "running")
         if allowed_tools:
             return await run_agent_sdk(
                 prompt=prompt,
