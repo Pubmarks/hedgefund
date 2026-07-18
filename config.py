@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -13,6 +14,27 @@ REPO_ROOT = Path(__file__).resolve().parent
 REPORTS_DIR = REPO_ROOT / "out"
 DEFAULT_MEMORY_PATH = Path.home() / ".hedgefund" / "memory.md"
 DEFAULT_FREE_MODEL = "opencode/big-pickle"
+
+# OpenCode UI.error always wraps with ANSI: "\x1b[91m\x1b[1mError: \x1b[0m…"
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+class _DropOpencodeNoise(logging.Filter):
+    """Hide OpenCode CLI catch-all stderr that the SDK re-logs as WARNING.
+
+    OpenCode's top-level catch prints ``Error: Unexpected error`` via UI.error,
+    which embeds ANSI codes, so matching must strip escapes first.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not record.name.startswith("opencode_agent_sdk"):
+            return True
+        msg = _ANSI_RE.sub("", record.getMessage())
+        if "opencode stderr:" in msg and "Unexpected error" in msg:
+            return False
+        if msg.strip() in {"Unexpected error", "Error: Unexpected error"}:
+            return False
+        return True
 
 
 def _configure_logging() -> None:
@@ -26,6 +48,12 @@ def _configure_logging() -> None:
         force=True,
     )
     logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
+    noise = _DropOpencodeNoise()
+    transport = logging.getLogger("opencode_agent_sdk._internal.transport")
+    transport.addFilter(noise)
+    logging.getLogger("opencode_agent_sdk").addFilter(noise)
+    for handler in logging.root.handlers:
+        handler.addFilter(noise)
 
 
 _configure_logging()
