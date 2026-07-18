@@ -5,11 +5,14 @@ import asyncio
 import logging
 import os
 import shutil
+import subprocess
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
+import anyio
 from opencode_agent_sdk import (
     AgentOptions,
     AssistantMessage,
@@ -36,6 +39,9 @@ _SEM: asyncio.Semaphore | None = None
 
 # Heartbeat while an agent is waiting on OpenCode (connect / prompt / tools).
 _STUCK_HEARTBEAT_S = float(os.getenv("HEDGEFUND_STUCK_HEARTBEAT_S", "30"))
+
+# Auth files to copy into each isolated OpenCode data dir (env keys still win).
+_OPENCODE_AUTH_FILES = ("auth.json",)
 
 
 def _semaphore() -> asyncio.Semaphore:
@@ -344,6 +350,92 @@ async def _set_session_mode(client: SDKClient, mode_id: str) -> bool:
         return False
 
 
+def _isolated_opencode_env() -> tuple[dict[str, str], Path]:
+    """Per-session XDG dirs so concurrent ``opencode acp`` processes do not share a DB.
+
+    Two ACP subprocesses with the same ``XDG_DATA_HOME`` deadlock on OpenCode's
+    SQLite DB: one connects, the other hangs forever inside ``connect()``.
+    """
+    root = Path(tempfile.mkdtemp(prefix="hedgefund-opencode-"))
+    data = root / "share"
+    state = root / "state"
+    cache = root / "cache"
+    for path in (data, state, cache):
+        path.mkdir(parents=True, exist_ok=True)
+
+    # Preserve credentials from the real data dir when present.
+    real_data = Path(
+        os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+    ) / "opencode"
+    dest = data / "opencode"
+    dest.mkdir(parents=True, exist_ok=True)
+    if real_data.is_dir():
+        for name in _OPENCODE_AUTH_FILES:
+            src = real_data / name
+            if src.is_file():
+                shutil.copy2(src, dest / name)
+
+    env = os.environ.copy()
+    env["XDG_DATA_HOME"] = str(data)
+    env["XDG_STATE_HOME"] = str(state)
+    env["XDG_CACHE_HOME"] = str(cache)
+    return env, root
+
+
+async def _connect_subprocess(
+    client: SDKClient,
+    progress: _AgentProgress,
+    env: dict[str, str],
+) -> None:
+    """Connect like SDKClient._connect_subprocess, with isolated env + stage logs."""
+    from opencode_agent_sdk._internal.acp import ACPSession
+    from opencode_agent_sdk._internal.transport import SubprocessTransport, _find_opencode_binary
+    from opencode_agent_sdk.client import _build_mcp_servers
+
+    options = client._options  # noqa: SLF001
+    transport = SubprocessTransport(cwd=options.cwd)
+
+    progress.set("connecting", "spawn opencode acp")
+    binary = _find_opencode_binary()
+    transport._process = await anyio.open_process(  # noqa: SLF001
+        [binary, "acp", "--print-logs", "--log-level", "INFO", "--cwd", transport._cwd],  # noqa: SLF001
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    transport._stderr_scope = await anyio.create_task_group().__aenter__()  # noqa: SLF001
+    transport._stderr_scope.start_soon(transport._drain_stderr)  # noqa: SLF001
+    client._transport = transport  # noqa: SLF001
+
+    session = ACPSession(transport=transport, hooks=options.hooks)
+    client._session = session  # noqa: SLF001
+    await session.start_reader()
+
+    progress.set("connecting", "acp initialize")
+    await session.initialize()
+
+    effective_servers = dict(options.mcp_servers)
+    acp_mcp_servers = _build_mcp_servers(effective_servers)
+
+    progress.set("connecting", "acp session/new")
+    if options.resume:
+        await session.load_session(
+            session_id=options.resume,
+            cwd=options.cwd,
+            mcp_servers=acp_mcp_servers,
+        )
+    else:
+        await session.new_session(
+            cwd=options.cwd,
+            mcp_servers=acp_mcp_servers,
+            model=options.model or None,
+            provider_id=options.provider_id or None,
+            permission_mode=options.permission_mode,
+            system_prompt=options.system_prompt,
+        )
+
+
 def _extract_http_text(messages: Any) -> str:
     last_text = ""
     for item in messages:
@@ -421,9 +513,9 @@ async def _run_subprocess_sdk(
         allowed_tools=_opencode_tools(allowed_tools) if allowed_tools else [],
     )
     client = SDKClient(options=options)
+    env, isolated_root = _isolated_opencode_env()
     try:
-        progress.set("connecting", "opencode acp subprocess")
-        await client.connect()
+        await _connect_subprocess(client, progress, env)
         _patch_acp_session(client, progress)
         progress.set("connected", f"session={getattr(client._session, 'session_id', '')}")  # noqa: SLF001
 
@@ -460,6 +552,7 @@ async def _run_subprocess_sdk(
     finally:
         await progress.stop()
         await client.disconnect()
+        shutil.rmtree(isolated_root, ignore_errors=True)
 
 
 async def run_llm_direct(
