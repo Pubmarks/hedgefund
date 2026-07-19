@@ -7,6 +7,26 @@ on:
         description: Stock ticker symbol (e.g. AAPL)
         required: true
         type: string
+      debate_rounds:
+        description: Bull/Bear debate rounds (1-4)
+        required: false
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+        default: "1"
+      risk_rounds:
+        description: Risk analyst discussion rounds (1-4)
+        required: false
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+        default: "1"
       image_tag:
         description: Container image tag (e.g. latest, sha-abc1234)
         required: false
@@ -85,7 +105,9 @@ jobs:
             -e OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
             -e OPENCODE_PURE=1 \
             "${image}" \
-            "${ticker}")"
+            "${ticker}" \
+            --debate-rounds '${{ inputs.debate_rounds }}' \
+            --risk-rounds '${{ inputs.risk_rounds }}')"
           trap 'podman rm -f "${cid}" >/dev/null 2>&1 || true' EXIT
           podman start -a "${cid}"
           mkdir -p "out/${ticker}"
