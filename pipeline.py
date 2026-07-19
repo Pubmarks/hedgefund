@@ -56,7 +56,7 @@ async def research(ticker: str, trade_date: str, cfg: Config | None = None) -> s
 
     from agent import ensure_opencode_ready
 
-    await ensure_opencode_ready(server_url=cfg.opencode_server_url)
+    await ensure_opencode_ready()
 
     memory = MemoryLog(cfg.memory_log_path, cfg.memory_log_max_entries)
     past_context = memory.get_past_context(ticker)

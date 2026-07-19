@@ -9,7 +9,7 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
-from agent import RATING_INSTRUCTION, run_agent, write_report
+from agent import RATING_INSTRUCTION, instrument_context, read_report, run_agent, write_report
 from config import Config
 
 _NO_TITLE_INSTRUCTION = (
@@ -177,15 +177,6 @@ def _extract_all(result: dict) -> dict[str, str]:
     return out
 
 
-def _instrument_context(ticker: str) -> str:
-    return (
-        f"The instrument to analyze is `{ticker}`. "
-        "Use this exact ticker in every tool call, report, and recommendation, "
-        "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`). "
-        "Do NOT mention, reference, or analyze any other ticker symbol."
-    )
-
-
 def _ohlcv_start(trade_date: str, years: int) -> str:
     d = date.fromisoformat(trade_date)
     try:
@@ -220,13 +211,11 @@ def _read_articles(pages_dir: Path) -> str:
 
 async def run_market_analyst(ticker: str, trade_date: str, cfg: Config) -> Path:
     from tools.indicators import fetch_indicators
-    from tools.ohlcv import fetch_ohlcv
     from tools.vwap import fetch_vwap
 
     out_path = cfg.reports_dir / ticker / "market.md"
     ohlcv_start = _ohlcv_start(trade_date, cfg.ohlcv_years)
 
-    ohlcv_result = fetch_ohlcv(ticker, ohlcv_start, trade_date)
     indicators_result = fetch_indicators(
         symbol=ticker,
         indicators=["close_50_sma", "close_200_sma", "close_10_ema",
@@ -240,7 +229,7 @@ async def run_market_analyst(ticker: str, trade_date: str, cfg: Config) -> Path:
     vwap = _extract_content(vwap_result, "vwap.csv")
 
     prompt = (
-        f"Current date: {trade_date}. {_instrument_context(ticker)}\n\n"
+        f"Current date: {trade_date}. {instrument_context(ticker)}\n\n"
         f"## Technical Indicators\n{indicators}\n\n"
         f"## VWAP (daily bars, cumulative from {ohlcv_start})\n{vwap}\n\n"
         f"{RATING_INSTRUCTION}"
@@ -277,7 +266,7 @@ async def run_social_analyst(ticker: str, trade_date: str, cfg: Config) -> Path:
     articles = _read_articles(pages_dir)
 
     prompt = (
-        f"Current date: {trade_date}. {_instrument_context(ticker)}\n\n"
+        f"Current date: {trade_date}. {instrument_context(ticker)}\n\n"
         f"## Company News\n{news_company}\n\n"
         f"## Article Bodies\n{articles}\n\n"
         f"Focus only on company-specific news and sentiment.\n"
@@ -299,7 +288,6 @@ async def run_social_analyst(ticker: str, trade_date: str, cfg: Config) -> Path:
 
 async def run_news_analyst(ticker: str, trade_date: str, cfg: Config) -> Path:
     from tools.insider import fetch_insider
-    from tools.macro import fetch_macro_data
     from tools.news import fetch_news
 
     out_path = cfg.reports_dir / ticker / "news.md"
@@ -318,7 +306,7 @@ async def run_news_analyst(ticker: str, trade_date: str, cfg: Config) -> Path:
     macro_web = read_report(global_dir / "macro_web_research.md")
 
     prompt = (
-        f"Current date: {trade_date}. {_instrument_context(ticker)}\n\n"
+        f"Current date: {trade_date}. {instrument_context(ticker)}\n\n"
         f"## Company News\n{news_company}\n\n"
         f"## Insider Transactions\n{insider}\n\n"
         f"## Global Macro Summary\n{global_summary}\n\n"
@@ -368,7 +356,7 @@ async def run_fundamentals_analyst(ticker: str, trade_date: str, cfg: Config) ->
         avgpe = f"{avgpe}\n\n{avgpe_10}" if avgpe else avgpe_10
 
     prompt = (
-        f"Current date: {trade_date}. {_instrument_context(ticker)}\n\n"
+        f"Current date: {trade_date}. {instrument_context(ticker)}\n\n"
         f"## Fundamentals\n{fundamentals}\n\n"
         f"## Balance Sheet\n{balance_sheet}\n\n"
         f"## Cash Flow\n{cashflow}\n\n"
@@ -499,7 +487,3 @@ async def run_macro_web_researcher(trade_date: str, cfg: Config) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(content, encoding="utf-8")
     return out_path
-
-
-# Re-export read_report for phase modules that import from analysts
-from agent import read_report  # noqa: E402, F401

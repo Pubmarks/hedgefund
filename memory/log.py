@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 _RATINGS = ("Buy", "Overweight", "Hold", "Underweight", "Sell")
 _RATING_SET = {r.lower() for r in _RATINGS}
@@ -156,7 +155,7 @@ class MemoryLog:
             kept.append(block)
         return kept
 
-    def _parse_entry(self, raw: str) -> Optional[dict]:
+    def _parse_entry(self, raw: str) -> dict | None:
         lines = raw.strip().splitlines()
         if not lines:
             return None

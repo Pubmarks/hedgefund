@@ -75,10 +75,6 @@ class Config:
     memory_log_path: Path = field(default_factory=lambda: DEFAULT_MEMORY_PATH)
     memory_log_max_entries: int | None = None
 
-    # OpenCode runtime
-    opencode_server_url: str = ""
-    opencode_api_key: str = ""
-
     # OHLCV lookback window in years (used by market analyst)
     ohlcv_years: int = 5
 
@@ -88,8 +84,6 @@ class Config:
 
 def default_config() -> Config:
     return Config(
-        opencode_server_url=os.getenv("OPENCODE_SERVER_URL", ""),
-        opencode_api_key=os.getenv("OPENCODE_API_KEY", ""),
         quick_model=os.getenv("HEDGEFUND_QUICK_MODEL", DEFAULT_FREE_MODEL),
         deep_model=os.getenv("HEDGEFUND_DEEP_MODEL", DEFAULT_FREE_MODEL),
         epic_model=os.getenv("HEDGEFUND_EPIC_MODEL", DEFAULT_FREE_MODEL),
